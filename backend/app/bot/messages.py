@@ -46,3 +46,23 @@ async def send_new_sketch_to_master(
     )
 
     await bot.send_message(chat_id=settings.MASTER_TG_ID, text=text)
+
+
+async def send_repeat_request_to_master(
+    repeat_request_id: int,
+    user_id: int,
+    username: str | None,
+    product_title: str,
+    text_value: str,
+):
+    username_line = f"Username: @{username}" if username else "Username: —"
+
+    text = (
+        f"♻️ Новая заявка на повтор #{repeat_request_id}\n\n"
+        f"Товар-основа: {product_title}\n"
+        f"Пожелания по изменениям:\n{text_value}\n\n"
+        f"Telegram ID: {user_id}\n"
+        f"{username_line}"
+    )
+
+    await bot.send_message(chat_id=settings.MASTER_TG_ID, text=text)

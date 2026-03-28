@@ -65,7 +65,6 @@ async function uploadFiles(files) {
   return Array.isArray(data.urls) ? data.urls : [];
 }
 
-
 function loadImageFromUrl(url) {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -207,7 +206,7 @@ function Gallery({ photos = [], title, className = "", imageClassName = "" }) {
 
 function CategorySwitch({ category, setCategory }) {
   return (
-    <div className="categoryShell liquidGlassSoft">
+    <div className="categoryShell liquidGlassSoft categoryShellWide">
       <button
         className={`categoryBtn ${category === "toys" ? "categoryBtnActive" : ""}`}
         onClick={() => setCategory("toys")}
@@ -220,11 +219,17 @@ function CategorySwitch({ category, setCategory }) {
       >
         Брелоки
       </button>
+      <button
+        className={`categoryBtn ${category === "repeat" ? "categoryBtnActive" : ""}`}
+        onClick={() => setCategory("repeat")}
+      >
+        Заказать повтор
+      </button>
     </div>
   );
 }
 
-function ProductCard({ product, onClick }) {
+function ProductCard({ product, onClick, hidePrice = false }) {
   const hasDiscount = Number(product.old_price_rub) > Number(product.price_rub);
   const photos = (product.photos || []).map(absoluteMediaUrl);
 
@@ -236,23 +241,35 @@ function ProductCard({ product, onClick }) {
         </div>
         <div className="productBody">
           <div className="productTitle">{product.title}</div>
-          <div className="productPrice">
-            {hasDiscount ? (
-              <>
-                <div className="oldPriceText">{product.old_price_rub} ₽</div>
+          {!hidePrice && (
+            <div className="productPrice">
+              {hasDiscount ? (
+                <>
+                  <div className="oldPriceText">{product.old_price_rub} ₽</div>
+                  <div>{product.price_rub} ₽</div>
+                </>
+              ) : (
                 <div>{product.price_rub} ₽</div>
-              </>
-            ) : (
-              <div>{product.price_rub} ₽</div>
-            )}
-          </div>
+              )}
+            </div>
+          )}
         </div>
       </button>
     </div>
   );
 }
 
-function ProductDetailsModal({ product, onClose, onOrder, isMaster, onEdit, onToggleActive }) {
+function ProductDetailsModal({
+  product,
+  onClose,
+  onOrder,
+  isMaster,
+  onEdit,
+  onToggleActive,
+  onDelete,
+  hidePrice = false,
+  isRepeatCategory = false,
+}) {
   const hasDiscount = Number(product.old_price_rub) > Number(product.price_rub);
   const photos = (product.photos || []).map(absoluteMediaUrl);
 
@@ -269,28 +286,37 @@ function ProductDetailsModal({ product, onClose, onOrder, isMaster, onEdit, onTo
           <div className="detailContent">
             <h2 className="detailTitle">{product.title}</h2>
 
-            <div className="detailPrice">
-              {hasDiscount ? (
-                <>
-                  <div className="oldPriceText detailOldPrice">{product.old_price_rub} ₽</div>
+            {!hidePrice && (
+              <div className="detailPrice">
+                {hasDiscount ? (
+                  <>
+                    <div className="oldPriceText detailOldPrice">{product.old_price_rub} ₽</div>
+                    <div>{product.price_rub} ₽</div>
+                  </>
+                ) : (
                   <div>{product.price_rub} ₽</div>
-                </>
-              ) : (
-                <div>{product.price_rub} ₽</div>
-              )}
-            </div>
+                )}
+              </div>
+            )}
 
             <p className="detailText">{product.description || "Описание товара пока не добавлено."}</p>
 
             <div className="detailActions">
-              <button className="primaryBtn pressable" onClick={onOrder}>Оформить заказ</button>
+              <button className="primaryBtn pressable" onClick={onOrder}>
+                {isRepeatCategory ? "Заказать повторно" : "Оформить заказ"}
+              </button>
 
               {isMaster && (
                 <>
                   <button className="ghostBtn pressable" onClick={() => onEdit(product)}>Редактировать</button>
-                  <button className={`pressable ${product.is_active ? "dangerBtn" : "ghostBtn"}`} onClick={() => onToggleActive(product)}>
-                    {product.is_active ? "Скрыть" : "Показать"}
-                  </button>
+                  {!isRepeatCategory && (
+                    <button className={`pressable ${product.is_active ? "dangerBtn" : "ghostBtn"}`} onClick={() => onToggleActive(product)}>
+                      {product.is_active ? "Скрыть" : "Показать"}
+                    </button>
+                  )}
+                  {isRepeatCategory && (
+                    <button className="dangerBtn pressable" onClick={() => onDelete(product)}>Удалить полностью</button>
+                  )}
                 </>
               )}
 
@@ -333,6 +359,24 @@ function SketchModal({ sketchText, setSketchText, onClose, onSubmit }) {
         <div className="orderTitle">Сделать эскиз</div>
         <div className="orderSub">Опиши внешний вид игрушки, которую хочешь заказать</div>
         <textarea className="textarea" placeholder="Например: фиолетовый котик с луной и звёздами..." value={sketchText} onChange={e => setSketchText(e.target.value)} />
+        <button className="primaryBtn largeBtn pressable" onClick={onSubmit}>Отправить мастеру</button>
+      </div>
+    </div>
+  );
+}
+
+function RepeatModal({ product, repeatText, setRepeatText, onClose, onSubmit }) {
+  return (
+    <div className="modalBack" onClick={onClose}>
+      <div className="orderModal liquidGlassStrong" onClick={e => e.stopPropagation()}>
+        <div className="orderTitle">Заказать повторно</div>
+        <div className="orderSub">{product.title}</div>
+        <textarea
+          className="textarea"
+          placeholder="Опиши, что нужно изменить. Можно написать: оставить без изменений."
+          value={repeatText}
+          onChange={e => setRepeatText(e.target.value)}
+        />
         <button className="primaryBtn largeBtn pressable" onClick={onSubmit}>Отправить мастеру</button>
       </div>
     </div>
@@ -422,6 +466,8 @@ export default function App() {
   const [products, setProducts] = useState([]);
   const [selected, setSelected] = useState(null);
   const [showOrder, setShowOrder] = useState(false);
+  const [showRepeat, setShowRepeat] = useState(false);
+  const [repeatText, setRepeatText] = useState("");
   const [orderForm, setOrderForm] = useState({ full_name: "", phone: "", city: "", pvz_type: "ozon", pvz_text: "" });
   const [sketchText, setSketchText] = useState("");
   const [showSketch, setShowSketch] = useState(false);
@@ -431,12 +477,13 @@ export default function App() {
   const [toast, setToast] = useState("");
   const user = useMemo(() => getTgUser(), []);
   const isMaster = Boolean(user && Number(user.id) === MASTER_ID);
+  const isRepeatCategory = category === "repeat";
 
   useEffect(() => { tg()?.ready?.(); }, []);
   useEffect(() => { loadProducts(); }, [category]);
 
   useEffect(() => {
-    const isModalOpen = Boolean(selected || showOrder || showSketch || showAdmin);
+    const isModalOpen = Boolean(selected || showOrder || showRepeat || showSketch || showAdmin);
 
     if (isModalOpen) {
       document.body.style.overflow = "hidden";
@@ -453,7 +500,7 @@ export default function App() {
       document.documentElement.style.overflow = "";
       document.body.style.touchAction = "";
     };
-  }, [selected, showOrder, showSketch, showAdmin]);
+  }, [selected, showOrder, showRepeat, showSketch, showAdmin]);
 
   function resetAdminForm() {
     setAdminForm(makeAdminForm());
@@ -466,7 +513,7 @@ export default function App() {
       description: product.description || "",
       price_rub: String(product.price_rub || ""),
       old_price_rub: product.old_price_rub ? String(product.old_price_rub) : "",
-      category: product.category || "toys",
+      category: product.category === "repeat" ? "toys" : (product.category || "toys"),
       photoItems: (product.photos || []).map((photo, index) => ({
         id: `existing-${index}-${photo}`,
         kind: "existing",
@@ -484,6 +531,7 @@ export default function App() {
       if (selected) {
         const fresh = (data.items || []).find((item) => item.id === selected.id);
         if (fresh) setSelected(fresh);
+        else setSelected(null);
       }
     } catch (e) {
       setToast(`Ошибка загрузки товаров: ${e.message}`);
@@ -503,6 +551,7 @@ export default function App() {
       setShowOrder(false);
       setSelected(null);
       setOrderForm({ full_name: "", phone: "", city: "", pvz_type: "ozon", pvz_text: "" });
+      loadProducts();
     } catch (e) {
       setToast(`Ошибка заказа: ${e.message}`);
     }
@@ -518,6 +567,23 @@ export default function App() {
       setSketchText("");
       setShowSketch(false);
       setToast("Мастер получил ваше описание игрушки, в скором времени он вам напишет для уточнения деталей.");
+    } catch (e) {
+      setToast(`Ошибка отправки: ${e.message}`);
+    }
+  }
+
+  async function submitRepeatRequest() {
+    if (!selected) return;
+    if (!repeatText.trim()) {
+      setToast("Опиши, что нужно изменить, или напиши: оставить без изменений");
+      return;
+    }
+    try {
+      await api("/repeat", { method: "POST", body: { product_id: selected.id, text: repeatText } });
+      setRepeatText("");
+      setShowRepeat(false);
+      setSelected(null);
+      setToast("Мастер получил заявку на повтор и свяжется с вами для уточнения деталей.");
     } catch (e) {
       setToast(`Ошибка отправки: ${e.message}`);
     }
@@ -575,6 +641,20 @@ export default function App() {
       loadProducts();
     } catch (e) {
       setToast(`Ошибка изменения статуса: ${e.message}`);
+    }
+  }
+
+  async function deleteProduct(product) {
+    const ok = window.confirm(`Удалить товар "${product.title}" полностью из базы?`);
+    if (!ok) return;
+
+    try {
+      await api(`/admin/products/${product.id}`, { method: "DELETE" });
+      setSelected(null);
+      setToast("Товар полностью удалён");
+      loadProducts();
+    } catch (e) {
+      setToast(`Ошибка удаления: ${e.message}`);
     }
   }
 
@@ -659,23 +739,35 @@ export default function App() {
 
       <section className="productsSection">
         <div className="productsGrid">
-          {products.map(p => <ProductCard key={p.id} product={p} onClick={() => setSelected(p)} />)}
+          {products.map(p => (
+            <ProductCard
+              key={p.id}
+              product={p}
+              hidePrice={isRepeatCategory}
+              onClick={() => setSelected(p)}
+            />
+          ))}
           {products.length === 0 && <div className="emptyState">Пока нет товаров в этой категории.</div>}
         </div>
       </section>
 
-      {selected && !showOrder && (
+      {selected && !showOrder && !showRepeat && (
         <ProductDetailsModal
           product={selected}
           onClose={() => setSelected(null)}
-          onOrder={() => setShowOrder(true)}
+          onOrder={() => isRepeatCategory ? setShowRepeat(true) : setShowOrder(true)}
           isMaster={isMaster}
           onEdit={openEditProduct}
           onToggleActive={toggleProductActive}
+          onDelete={deleteProduct}
+          hidePrice={isRepeatCategory}
+          isRepeatCategory={isRepeatCategory}
         />
       )}
 
       {selected && showOrder && <OrderModal product={selected} orderForm={orderForm} setOrderForm={setOrderForm} onClose={() => setShowOrder(false)} onSubmit={createOrder} />}
+
+      {selected && showRepeat && <RepeatModal product={selected} repeatText={repeatText} setRepeatText={setRepeatText} onClose={() => setShowRepeat(false)} onSubmit={submitRepeatRequest} />}
 
       {showSketch && <SketchModal sketchText={sketchText} setSketchText={setSketchText} onClose={() => setShowSketch(false)} onSubmit={submitSketch} />}
 
@@ -685,8 +777,8 @@ export default function App() {
           setAdminForm={setAdminForm}
           onClose={() => {
             adminForm.photoItems.forEach((item) => {
-        if (item.kind === "new" && item.preview) URL.revokeObjectURL(item.preview);
-      });
+              if (item.kind === "new" && item.preview) URL.revokeObjectURL(item.preview);
+            });
             setShowAdmin(false);
             resetAdminForm();
           }}
