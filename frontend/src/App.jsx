@@ -17,6 +17,14 @@ function getInitData() {
   return tg()?.initData || "";
 }
 
+function absoluteMediaUrl(url) {
+  if (!url) return logo;
+  if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("data:")) return url;
+  const apiBase = String(API_URL || "").replace(/\/$/, "");
+  const apiOrigin = apiBase.replace(/\/api$/, "");
+  return `${apiOrigin}${url.startsWith("/") ? url : `/${url}`}`;
+}
+
 async function api(path, { method = "GET", body } = {}) {
   const initData = getInitData();
   if (!initData) throw new Error("Mini App открыт не через Telegram");
@@ -34,16 +42,168 @@ async function api(path, { method = "GET", body } = {}) {
   return res.json();
 }
 
-function fileToDataUrl(file) {
+async function uploadFiles(files) {
+  const initData = getInitData();
+  if (!initData) throw new Error("Mini App открыт не через Telegram");
+  if (!files?.length) return [];
+
+  const formData = new FormData();
+  files.forEach((file) => formData.append("files", file));
+
+  const res = await fetch(`${API_URL}/admin/uploads`, {
+    method: "POST",
+    headers: { "X-TG-INIT-DATA": initData },
+    body: formData,
+  });
+
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(txt || `HTTP ${res.status}`);
+  }
+
+  const data = await res.json();
+  return Array.isArray(data.urls) ? data.urls : [];
+}
+
+
+function loadImageFromUrl(url) {
   return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ""));
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error("Не удалось обработать изображение"));
+    img.src = url;
   });
 }
 
-// ---------- Компоненты ----------
+async function normalizeImageFile(file) {
+  const type = String(file.type || "").toLowerCase();
+  if (!type.startsWith("image/")) return file;
+  if (type === "image/gif" || type === "image/svg+xml") return file;
+
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    const image = await loadImageFromUrl(objectUrl);
+    const side = Math.min(image.naturalWidth || image.width, image.naturalHeight || image.height);
+    if (!side) return file;
+
+    const targetSize = Math.min(1400, side);
+    const sx = Math.max(0, ((image.naturalWidth || image.width) - side) / 2);
+    const sy = Math.max(0, ((image.naturalHeight || image.height) - side) / 2);
+
+    const canvas = document.createElement("canvas");
+    canvas.width = targetSize;
+    canvas.height = targetSize;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return file;
+
+    ctx.drawImage(image, sx, sy, side, side, 0, 0, targetSize, targetSize);
+
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.86));
+    if (!blob) return file;
+
+    const baseName = file.name.replace(/\.[^.]+$/, "") || "photo";
+    return new File([blob], `${baseName}.jpg`, { type: "image/jpeg" });
+  } catch {
+    return file;
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
+function makeAdminForm() {
+  return {
+    id: null,
+    title: "",
+    description: "",
+    price_rub: "",
+    old_price_rub: "",
+    category: "toys",
+    photoItems: [],
+    is_active: true,
+  };
+}
+
+function moveArrayItem(items, fromIndex, toIndex) {
+  if (
+    fromIndex < 0 ||
+    toIndex < 0 ||
+    fromIndex >= items.length ||
+    toIndex >= items.length ||
+    fromIndex === toIndex
+  ) {
+    return items;
+  }
+
+  const next = [...items];
+  const [moved] = next.splice(fromIndex, 1);
+  next.splice(toIndex, 0, moved);
+  return next;
+}
+
+function Gallery({ photos = [], title, className = "", imageClassName = "" }) {
+  const safePhotos = photos.length ? photos : [logo];
+  const [index, setIndex] = useState(0);
+  const [touchStartX, setTouchStartX] = useState(null);
+  const [touchDeltaX, setTouchDeltaX] = useState(0);
+
+  useEffect(() => {
+    setIndex(0);
+  }, [JSON.stringify(safePhotos)]);
+
+  function next() {
+    setIndex((current) => (current + 1) % safePhotos.length);
+  }
+
+  function prev() {
+    setIndex((current) => (current - 1 + safePhotos.length) % safePhotos.length);
+  }
+
+  function handleTouchStart(event) {
+    setTouchStartX(event.touches?.[0]?.clientX ?? null);
+    setTouchDeltaX(0);
+  }
+
+  function handleTouchMove(event) {
+    const currentX = event.touches?.[0]?.clientX;
+    if (touchStartX == null || currentX == null) return;
+    setTouchDeltaX(currentX - touchStartX);
+  }
+
+  function handleTouchEnd() {
+    if (Math.abs(touchDeltaX) > 40) {
+      if (touchDeltaX < 0) next();
+      if (touchDeltaX > 0) prev();
+    }
+    setTouchStartX(null);
+    setTouchDeltaX(0);
+  }
+
+  return (
+    <div
+      className={`gallery ${className}`.trim()}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+      onTouchCancel={handleTouchEnd}
+    >
+      <img className={imageClassName || "galleryImage"} src={safePhotos[index]} alt={title} draggable="false" />
+
+      {safePhotos.length > 1 && (
+        <div className="galleryDots">
+          {safePhotos.map((_, dotIndex) => (
+            <button
+              key={dotIndex}
+              type="button"
+              className={`galleryDot ${dotIndex === index ? "galleryDotActive" : ""}`}
+              onClick={() => setIndex(dotIndex)}
+              aria-label={`Фото ${dotIndex + 1}`}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function CategorySwitch({ category, setCategory }) {
   return (
@@ -65,14 +225,14 @@ function CategorySwitch({ category, setCategory }) {
 }
 
 function ProductCard({ product, onClick }) {
-  const image = product.photos?.[0] || logo;
   const hasDiscount = Number(product.old_price_rub) > Number(product.price_rub);
+  const photos = (product.photos || []).map(absoluteMediaUrl);
 
   return (
     <div className="productCardWrap liquidGlassSoft">
       <button className="productCard pressable" onClick={onClick}>
         <div className="productImageWrap">
-          <img className="productImage" src={image} alt={product.title} />
+          <Gallery photos={photos} title={product.title} imageClassName="productImage" />
         </div>
         <div className="productBody">
           <div className="productTitle">{product.title}</div>
@@ -93,8 +253,8 @@ function ProductCard({ product, onClick }) {
 }
 
 function ProductDetailsModal({ product, onClose, onOrder, isMaster, onEdit, onToggleActive }) {
-  const image = product.photos?.[0] || logo;
   const hasDiscount = Number(product.old_price_rub) > Number(product.price_rub);
+  const photos = (product.photos || []).map(absoluteMediaUrl);
 
   return (
     <div className="modalBack" onClick={onClose}>
@@ -103,7 +263,7 @@ function ProductDetailsModal({ product, onClose, onOrder, isMaster, onEdit, onTo
 
         <div className="detailCard liquidGlassStrong">
           <div className="detailImageWrap">
-            <img className="detailImage" src={image} alt={product.title} />
+            <Gallery photos={photos} title={product.title} imageClassName="detailImage" />
           </div>
 
           <div className="detailContent">
@@ -179,8 +339,9 @@ function SketchModal({ sketchText, setSketchText, onClose, onSubmit }) {
   );
 }
 
-function AdminModal({ adminForm, setAdminForm, onClose, onSubmit, saving, onFileChange }) {
+function AdminModal({ adminForm, setAdminForm, onClose, onSubmit, saving, onFilesChange, onRemovePhoto, onMovePhoto }) {
   const isEditing = Boolean(adminForm.id);
+  const totalPhotosCount = adminForm.photoItems.length;
 
   return (
     <div className="modalBack" onClick={onClose}>
@@ -199,14 +360,52 @@ function AdminModal({ adminForm, setAdminForm, onClose, onSubmit, saving, onFile
             <option value="keychains">Брелоки</option>
           </select>
           <label className="fileInputWrap">
-            <span className="fileInputLabel">{adminForm.photoName || "Выбрать фото"}</span>
-            <input className="fileInput" type="file" accept="image/*" onChange={onFileChange} />
+            <span className="fileInputLabel">{totalPhotosCount ? `Фото: ${totalPhotosCount}` : "Выбрать фото"}</span>
+            <input className="fileInput" type="file" accept="image/*" multiple onChange={onFilesChange} />
           </label>
-          {adminForm.photoPreview && (
-            <div className="adminPreviewWrap">
-              <img className="adminPreviewImage" src={adminForm.photoPreview} alt="preview" />
+
+          {adminForm.photoItems.length > 0 && (
+            <div className="adminPreviewGrid">
+              {adminForm.photoItems.map((photoItem, index) => (
+                <div key={`${photoItem.kind}-${photoItem.id}`} className="adminPreviewCard">
+                  <img
+                    className="adminPreviewImage"
+                    src={photoItem.kind === "existing" ? absoluteMediaUrl(photoItem.url) : photoItem.preview}
+                    alt={`Фото ${index + 1}`}
+                  />
+
+                  <div className="adminPreviewMeta">Фото {index + 1}</div>
+
+                  <div className="adminPreviewActions">
+                    <button
+                      type="button"
+                      className="adminPreviewMove pressable"
+                      onClick={() => onMovePhoto(index, -1)}
+                      disabled={index === 0}
+                    >
+                      ←
+                    </button>
+                    <button
+                      type="button"
+                      className="adminPreviewMove pressable"
+                      onClick={() => onMovePhoto(index, 1)}
+                      disabled={index === adminForm.photoItems.length - 1}
+                    >
+                      →
+                    </button>
+                    <button
+                      type="button"
+                      className="adminPreviewRemove pressable"
+                      onClick={() => onRemovePhoto(index)}
+                    >
+                      Удалить
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
+
           <textarea className="textarea compactTextarea" placeholder="Описание товара" value={adminForm.description} onChange={e => setAdminForm({ ...adminForm, description: e.target.value })} />
         </div>
 
@@ -218,8 +417,6 @@ function AdminModal({ adminForm, setAdminForm, onClose, onSubmit, saving, onFile
   );
 }
 
-// ---------- Основной компонент ----------
-
 export default function App() {
   const [category, setCategory] = useState("toys");
   const [products, setProducts] = useState([]);
@@ -230,7 +427,7 @@ export default function App() {
   const [showSketch, setShowSketch] = useState(false);
   const [showAdmin, setShowAdmin] = useState(false);
   const [savingAdmin, setSavingAdmin] = useState(false);
-  const [adminForm, setAdminForm] = useState({ id: null, title: "", description: "", price_rub: "", old_price_rub: "", category: "toys", photoData: "", photoName: "", photoPreview: "", is_active: true });
+  const [adminForm, setAdminForm] = useState(makeAdminForm());
   const [toast, setToast] = useState("");
   const user = useMemo(() => getTgUser(), []);
   const isMaster = Boolean(user && Number(user.id) === MASTER_ID);
@@ -239,7 +436,7 @@ export default function App() {
   useEffect(() => { loadProducts(); }, [category]);
 
   function resetAdminForm() {
-    setAdminForm({ id: null, title: "", description: "", price_rub: "", old_price_rub: "", category: "toys", photoData: "", photoName: "", photoPreview: "", is_active: true });
+    setAdminForm(makeAdminForm());
   }
 
   function openEditProduct(product) {
@@ -250,65 +447,174 @@ export default function App() {
       price_rub: String(product.price_rub || ""),
       old_price_rub: product.old_price_rub ? String(product.old_price_rub) : "",
       category: product.category || "toys",
-      photoData: product.photos?.[0] || "",
-      photoName: "",
-      photoPreview: product.photos?.[0] || "",
+      photoItems: (product.photos || []).map((photo, index) => ({
+        id: `existing-${index}-${photo}`,
+        kind: "existing",
+        url: photo,
+      })),
       is_active: Boolean(product.is_active),
     });
     setShowAdmin(true);
   }
 
   async function loadProducts() {
-    try { const data = await api(`/products?category=${category}`); setProducts(data.items || []); } catch (e) { setToast(`Ошибка загрузки товаров: ${e.message}`); }
+    try {
+      const data = await api(`/products?category=${category}`);
+      setProducts(data.items || []);
+      if (selected) {
+        const fresh = (data.items || []).find((item) => item.id === selected.id);
+        if (fresh) setSelected(fresh);
+      }
+    } catch (e) {
+      setToast(`Ошибка загрузки товаров: ${e.message}`);
+    }
   }
 
   async function createOrder() {
     if (!selected) return;
     const f = orderForm;
-    if (!f.full_name || !f.phone || !f.city || !f.pvz_text) { setToast("Заполни все поля доставки"); return; }
+    if (!f.full_name || !f.phone || !f.city || !f.pvz_text) {
+      setToast("Заполни все поля доставки");
+      return;
+    }
     try {
       const order = await api("/orders", { method: "POST", body: { product_id: selected.id, ...f } });
       setToast(`Заказ создан (#${order.id}). Следом подключим оплату СБП.`);
-      setShowOrder(false); setSelected(null);
+      setShowOrder(false);
+      setSelected(null);
       setOrderForm({ full_name: "", phone: "", city: "", pvz_type: "ozon", pvz_text: "" });
-    } catch (e) { setToast(`Ошибка заказа: ${e.message}`); }
+    } catch (e) {
+      setToast(`Ошибка заказа: ${e.message}`);
+    }
   }
 
   async function submitSketch() {
-    if (!sketchText.trim()) { setToast("Опиши внешний вид игрушки текстом"); return; }
-    try { await api("/sketch", { method: "POST", body: { text: sketchText, photos: [] } });
-      setSketchText(""); setShowSketch(false);
+    if (!sketchText.trim()) {
+      setToast("Опиши внешний вид игрушки текстом");
+      return;
+    }
+    try {
+      await api("/sketch", { method: "POST", body: { text: sketchText, photos: [] } });
+      setSketchText("");
+      setShowSketch(false);
       setToast("Мастер получил ваше описание игрушки, в скором времени он вам напишет для уточнения деталей.");
-    } catch (e) { setToast(`Ошибка отправки: ${e.message}`); }
+    } catch (e) {
+      setToast(`Ошибка отправки: ${e.message}`);
+    }
   }
 
-  async function handleAdminFileChange(e) {
-    const file = e.target.files?.[0]; if (!file) return;
-    try { const dataUrl = await fileToDataUrl(file); setAdminForm(prev => ({ ...prev, photoData: dataUrl, photoName: file.name, photoPreview: dataUrl })); }
-    catch { setToast("Не удалось прочитать файл"); }
+  async function handleAdminFilesChange(e) {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+
+    try {
+      const processedFiles = await Promise.all(files.map((file) => normalizeImageFile(file)));
+      const nextItems = processedFiles.map((file, index) => ({
+        id: `new-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 8)}`,
+        kind: "new",
+        file,
+        preview: URL.createObjectURL(file),
+      }));
+
+      setAdminForm((prev) => ({
+        ...prev,
+        photoItems: [...prev.photoItems, ...nextItems],
+      }));
+    } catch {
+      setToast("Не удалось подготовить фотографии");
+    } finally {
+      e.target.value = "";
+    }
+  }
+
+  function removePhoto(index) {
+    setAdminForm((prev) => {
+      const target = prev.photoItems[index];
+      if (target?.kind === "new" && target.preview) {
+        URL.revokeObjectURL(target.preview);
+      }
+      return {
+        ...prev,
+        photoItems: prev.photoItems.filter((_, i) => i !== index),
+      };
+    });
+  }
+
+  function movePhoto(index, direction) {
+    setAdminForm((prev) => ({
+      ...prev,
+      photoItems: moveArrayItem(prev.photoItems, index, index + direction),
+    }));
   }
 
   async function toggleProductActive(product) {
     try {
       await api(`/admin/products/${product.id}/active?is_active=${!product.is_active}`, { method: "PATCH" });
       if (selected && selected.id === product.id) setSelected({ ...selected, is_active: !product.is_active });
-      setToast(product.is_active ? "Товар скрыт" : "Товар снова показывается"); loadProducts();
-    } catch (e) { setToast(`Ошибка изменения статуса: ${e.message}`); }
+      setToast(product.is_active ? "Товар скрыт" : "Товар снова показывается");
+      loadProducts();
+    } catch (e) {
+      setToast(`Ошибка изменения статуса: ${e.message}`);
+    }
   }
 
   async function adminSaveProduct() {
-    if (!adminForm.title.trim()) { setToast("Введи название товара"); return; }
-    if (!adminForm.price_rub || Number(adminForm.price_rub) <= 0) { setToast("Введи корректную цену"); return; }
-    if (adminForm.old_price_rub && Number(adminForm.old_price_rub) <= Number(adminForm.price_rub)) { setToast("Старая цена должна быть больше новой"); return; }
+    if (!adminForm.title.trim()) {
+      setToast("Введи название товара");
+      return;
+    }
+    if (!adminForm.price_rub || Number(adminForm.price_rub) <= 0) {
+      setToast("Введи корректную цену");
+      return;
+    }
+    if (adminForm.old_price_rub && Number(adminForm.old_price_rub) <= Number(adminForm.price_rub)) {
+      setToast("Старая цена должна быть больше новой");
+      return;
+    }
 
     setSavingAdmin(true);
     try {
-      const payload = { title: adminForm.title, description: adminForm.description, price_rub: Number(adminForm.price_rub), old_price_rub: adminForm.old_price_rub ? Number(adminForm.old_price_rub) : null, category: adminForm.category, photos: adminForm.photoData ? [adminForm.photoData] : [], is_active: adminForm.is_active };
-      if (adminForm.id) { await api(`/admin/products/${adminForm.id}`, { method: "PATCH", body: payload }); setToast("Товар обновлён"); }
-      else { await api("/admin/products", { method: "POST", body: payload }); setToast("Товар создан"); }
-      resetAdminForm(); setShowAdmin(false); loadProducts();
-    } catch (e) { console.error("ADMIN SAVE ERROR", e); setToast(`Ошибка админки: ${e.message}`); }
-    finally { setSavingAdmin(false); }
+      const newPhotoItems = adminForm.photoItems.filter((item) => item.kind === "new");
+      const uploadedUrls = newPhotoItems.length ? await uploadFiles(newPhotoItems.map((item) => item.file)) : [];
+      let uploadedIndex = 0;
+
+      const payload = {
+        title: adminForm.title,
+        description: adminForm.description,
+        price_rub: Number(adminForm.price_rub),
+        old_price_rub: adminForm.old_price_rub ? Number(adminForm.old_price_rub) : null,
+        category: adminForm.category,
+        photos: adminForm.photoItems
+          .map((item) => {
+            if (item.kind === "existing") return item.url;
+            const url = uploadedUrls[uploadedIndex];
+            uploadedIndex += 1;
+            return url;
+          })
+          .filter(Boolean),
+        is_active: adminForm.is_active,
+      };
+
+      if (adminForm.id) {
+        await api(`/admin/products/${adminForm.id}`, { method: "PATCH", body: payload });
+        setToast("Товар обновлён");
+      } else {
+        await api("/admin/products", { method: "POST", body: payload });
+        setToast("Товар создан");
+      }
+
+      adminForm.photoItems.forEach((item) => {
+        if (item.kind === "new" && item.preview) URL.revokeObjectURL(item.preview);
+      });
+      resetAdminForm();
+      setShowAdmin(false);
+      loadProducts();
+    } catch (e) {
+      console.error("ADMIN SAVE ERROR", e);
+      setToast(`Ошибка админки: ${e.message}`);
+    } finally {
+      setSavingAdmin(false);
+    }
   }
 
   return (
@@ -340,8 +646,12 @@ export default function App() {
 
       {selected && !showOrder && (
         <ProductDetailsModal
-          product={selected} onClose={() => setSelected(null)} onOrder={() => setShowOrder(true)}
-          isMaster={isMaster} onEdit={openEditProduct} onToggleActive={toggleProductActive}
+          product={selected}
+          onClose={() => setSelected(null)}
+          onOrder={() => setShowOrder(true)}
+          isMaster={isMaster}
+          onEdit={openEditProduct}
+          onToggleActive={toggleProductActive}
         />
       )}
 
@@ -350,7 +660,22 @@ export default function App() {
       {showSketch && <SketchModal sketchText={sketchText} setSketchText={setSketchText} onClose={() => setShowSketch(false)} onSubmit={submitSketch} />}
 
       {showAdmin && isMaster && (
-        <AdminModal adminForm={adminForm} setAdminForm={setAdminForm} onClose={() => { setShowAdmin(false); resetAdminForm(); }} onSubmit={adminSaveProduct} saving={savingAdmin} onFileChange={handleAdminFileChange} />
+        <AdminModal
+          adminForm={adminForm}
+          setAdminForm={setAdminForm}
+          onClose={() => {
+            adminForm.photoItems.forEach((item) => {
+        if (item.kind === "new" && item.preview) URL.revokeObjectURL(item.preview);
+      });
+            setShowAdmin(false);
+            resetAdminForm();
+          }}
+          onSubmit={adminSaveProduct}
+          saving={savingAdmin}
+          onFilesChange={handleAdminFilesChange}
+          onRemovePhoto={removePhoto}
+          onMovePhoto={movePhoto}
+        />
       )}
 
       {toast && <div className="toast liquidGlassStrong" onClick={() => setToast("")}>{toast}</div>}
