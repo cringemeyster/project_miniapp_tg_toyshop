@@ -19,6 +19,8 @@ services:
       - db
     ports:
       - "8000:8000"
+    volumes:
+      - uploads_data:/app/uploads
 
   web:
     build:
@@ -34,3 +36,4 @@ services:
 
 volumes:
   pgdata:
+  uploads_data:

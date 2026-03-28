@@ -787,3 +787,19 @@ textarea::placeholder {
   }
 }
 
+
+
+.categoryShellWide {
+  width: min(100%, 760px);
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 8px;
+}
+
+.categoryShellWide .categoryBtn {
+  flex: 1 1 0;
+  min-width: 0;
+  white-space: nowrap;
+  font-size: 13px;
+  padding: 10px 6px;
+}
