@@ -11,6 +11,7 @@ from app.db.base import Base
 class ProductCategory(str, enum.Enum):
     toys = "toys"
     keychains = "keychains"
+    repeat = "repeat"
 
 
 class OrderStatus(str, enum.Enum):
@@ -80,3 +81,16 @@ class SketchRequest(Base):
     text: Mapped[str] = mapped_column(Text)
     photos: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class RepeatRequest(Base):
+    __tablename__ = "repeat_requests"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_tg_id: Mapped[int] = mapped_column(Integer, index=True)
+    username: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    product_id: Mapped[int] = mapped_column(ForeignKey("products.id"), index=True)
+    text: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    product = relationship("Product")
