@@ -1,9 +1,16 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import logo from "./assets/logo_opacity.png";
 import logoShop from "./assets/logo_shop.png";
 
 const API_URL = import.meta.env.VITE_API_URL;
 const MASTER_ID = Number(import.meta.env.VITE_MASTER_ID);
+const CATEGORY_ORDER = ["toys", "keychains", "repeat"];
+const CATEGORY_LABELS = {
+  toys: "Игрушки",
+  keychains: "Брелоки",
+  repeat: "Заказать повтор",
+};
+
 
 function tg() {
   return window.Telegram?.WebApp;
@@ -144,38 +151,63 @@ function Gallery({ photos = [], title, className = "", imageClassName = "" }) {
   const [index, setIndex] = useState(0);
   const [touchStartX, setTouchStartX] = useState(null);
   const [touchDeltaX, setTouchDeltaX] = useState(0);
+  const [slideDirection, setSlideDirection] = useState("");
 
   useEffect(() => {
     setIndex(0);
+    setSlideDirection("");
   }, [JSON.stringify(safePhotos)]);
 
+  function goTo(nextIndex, direction = "") {
+    if (safePhotos.length <= 1) {
+      setIndex(0);
+      setSlideDirection("");
+      return;
+    }
+
+    setSlideDirection(direction);
+    setIndex(nextIndex);
+
+    window.setTimeout(() => {
+      setSlideDirection("");
+    }, 220);
+  }
+
   function next() {
-    setIndex((current) => (current + 1) % safePhotos.length);
+    goTo((index + 1) % safePhotos.length, "left");
   }
 
   function prev() {
-    setIndex((current) => (current - 1 + safePhotos.length) % safePhotos.length);
+    goTo((index - 1 + safePhotos.length) % safePhotos.length, "right");
   }
 
   function handleTouchStart(event) {
+    if (safePhotos.length <= 1) return;
     setTouchStartX(event.touches?.[0]?.clientX ?? null);
     setTouchDeltaX(0);
   }
 
   function handleTouchMove(event) {
+    if (safePhotos.length <= 1) return;
     const currentX = event.touches?.[0]?.clientX;
     if (touchStartX == null || currentX == null) return;
     setTouchDeltaX(currentX - touchStartX);
   }
 
   function handleTouchEnd() {
-    if (Math.abs(touchDeltaX) > 40) {
+    if (safePhotos.length > 1 && Math.abs(touchDeltaX) > 40) {
       if (touchDeltaX < 0) next();
       if (touchDeltaX > 0) prev();
     }
     setTouchStartX(null);
     setTouchDeltaX(0);
   }
+
+  const animatedClass =
+    safePhotos.length > 1 && slideDirection
+      ? `galleryImage galleryImageSlide-${slideDirection}`
+      : "galleryImage";
+  const finalImageClassName = `${animatedClass} ${imageClassName || ""}`.trim();
 
   return (
     <div
@@ -185,7 +217,13 @@ function Gallery({ photos = [], title, className = "", imageClassName = "" }) {
       onTouchEnd={handleTouchEnd}
       onTouchCancel={handleTouchEnd}
     >
-      <img className={imageClassName || "galleryImage"} src={safePhotos[index]} alt={title} draggable="false" />
+      <img
+        key={`${index}-${safePhotos[index]}`}
+        className={finalImageClassName}
+        src={safePhotos[index]}
+        alt={title}
+        draggable="false"
+      />
 
       {safePhotos.length > 1 && (
         <div className="galleryDots">
@@ -194,7 +232,10 @@ function Gallery({ photos = [], title, className = "", imageClassName = "" }) {
               key={dotIndex}
               type="button"
               className={`galleryDot ${dotIndex === index ? "galleryDotActive" : ""}`}
-              onClick={() => setIndex(dotIndex)}
+              onClick={() => {
+                if (dotIndex === index) return;
+                goTo(dotIndex, dotIndex > index ? "left" : "right");
+              }}
               aria-label={`Фото ${dotIndex + 1}`}
             />
           ))}
@@ -205,26 +246,26 @@ function Gallery({ photos = [], title, className = "", imageClassName = "" }) {
 }
 
 function CategorySwitch({ category, setCategory }) {
+  const activeIndex = Math.max(0, CATEGORY_ORDER.indexOf(category));
+
   return (
     <div className="categoryShell liquidGlassSoft categoryShellWide">
-      <button
-        className={`categoryBtn ${category === "toys" ? "categoryBtnActive" : ""}`}
-        onClick={() => setCategory("toys")}
-      >
-        Игрушки
-      </button>
-      <button
-        className={`categoryBtn ${category === "keychains" ? "categoryBtnActive" : ""}`}
-        onClick={() => setCategory("keychains")}
-      >
-        Брелоки
-      </button>
-      <button
-        className={`categoryBtn ${category === "repeat" ? "categoryBtnActive" : ""}`}
-        onClick={() => setCategory("repeat")}
-      >
-        Заказать повтор
-      </button>
+      <div
+        className="categoryActivePill"
+        style={{ transform: `translateX(${activeIndex * 100}%)` }}
+        aria-hidden="true"
+      />
+
+      {CATEGORY_ORDER.map((categoryKey) => (
+        <button
+          key={categoryKey}
+          className={`categoryBtn ${category === categoryKey ? "categoryBtnActive" : ""}`}
+          onClick={() => setCategory(categoryKey)}
+          type="button"
+        >
+          {CATEGORY_LABELS[categoryKey]}
+        </button>
+      ))}
     </div>
   );
 }
@@ -427,7 +468,7 @@ function AdminModal({ adminForm, setAdminForm, onClose, onSubmit, saving, onFile
                       onClick={() => onMovePhoto(index, -1)}
                       disabled={index === 0}
                     >
-                      ←
+                      ↑
                     </button>
                     <button
                       type="button"
@@ -435,7 +476,7 @@ function AdminModal({ adminForm, setAdminForm, onClose, onSubmit, saving, onFile
                       onClick={() => onMovePhoto(index, 1)}
                       disabled={index === adminForm.photoItems.length - 1}
                     >
-                      →
+                      ↓
                     </button>
                     <button
                       type="button"
@@ -461,9 +502,20 @@ function AdminModal({ adminForm, setAdminForm, onClose, onSubmit, saving, onFile
   );
 }
 
+function ProductSkeletonCard({ hidePrice = false }) {
+  return (
+    <div className="productCardWrap liquidGlassSoft skeletonCard">
+      <div className="skeletonImage" />
+      <div className="skeletonLine skeletonLineTitle" />
+      {!hidePrice && <div className="skeletonLine skeletonLinePrice" />}
+    </div>
+  );
+}
+
 export default function App() {
   const [category, setCategory] = useState("toys");
   const [products, setProducts] = useState([]);
+  const [loadingProducts, setLoadingProducts] = useState(false);
   const [selected, setSelected] = useState(null);
   const [showOrder, setShowOrder] = useState(false);
   const [showRepeat, setShowRepeat] = useState(false);
@@ -478,13 +530,46 @@ export default function App() {
   const user = useMemo(() => getTgUser(), []);
   const isMaster = Boolean(user && Number(user.id) === MASTER_ID);
   const isRepeatCategory = category === "repeat";
+  const previousCategoryRef = useRef(category);
+  const [categorySlideDirection, setCategorySlideDirection] = useState("");
 
-  useEffect(() => { tg()?.ready?.(); }, []);
-  useEffect(() => { loadProducts(); }, [category]);
+  useEffect(() => {
+    const telegram = tg();
+    telegram?.ready?.();
+    telegram?.expand?.();
+    telegram?.disableVerticalSwipes?.();
+  }, []);
+
+  useLayoutEffect(() => {
+    setProducts([]);
+    setLoadingProducts(true);
+  }, [category]);
+
+  useEffect(() => {
+    loadProducts();
+  }, [category]);
+
+  useEffect(() => {
+    const previousCategory = previousCategoryRef.current;
+    if (previousCategory === category) return;
+
+    const previousIndex = CATEGORY_ORDER.indexOf(previousCategory);
+    const nextIndex = CATEGORY_ORDER.indexOf(category);
+    const direction = nextIndex > previousIndex ? "left" : "right";
+
+    setCategorySlideDirection(direction);
+    previousCategoryRef.current = category;
+
+    const timeoutId = window.setTimeout(() => {
+      setCategorySlideDirection("");
+    }, 320);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [category]);
 
   useEffect(() => {
     const isModalOpen = Boolean(selected || showOrder || showRepeat || showSketch || showAdmin);
-
+    
     if (isModalOpen) {
       document.body.style.overflow = "hidden";
       document.documentElement.style.overflow = "hidden";
@@ -526,6 +611,7 @@ export default function App() {
 
   async function loadProducts() {
     try {
+      setLoadingProducts(true);
       const data = await api(`/products?category=${category}`);
       setProducts(data.items || []);
       if (selected) {
@@ -535,6 +621,8 @@ export default function App() {
       }
     } catch (e) {
       setToast(`Ошибка загрузки товаров: ${e.message}`);
+    } finally {
+      setLoadingProducts(false);
     }
   }
 
@@ -731,23 +819,32 @@ export default function App() {
 
       {isMaster && (
         <section className="mainActionWrap">
-          <button className="mainActionBtn liquidGlass pressable" onClick={() => { resetAdminForm(); setShowAdmin(true); }}>Добавить товар</button>
+          <button className="mainActionBtn liquidGlass pressable" onClick={() => { resetAdminForm(); setShowAdmin(true); }}>+ Добавить товар</button>
         </section>
       )}
 
       <section className="switchWrap"><CategorySwitch category={category} setCategory={setCategory} /></section>
 
       <section className="productsSection">
-        <div className="productsGrid">
-          {products.map(p => (
-            <ProductCard
-              key={p.id}
-              product={p}
-              hidePrice={isRepeatCategory}
-              onClick={() => setSelected(p)}
-            />
-          ))}
-          {products.length === 0 && <div className="emptyState">Пока нет товаров в этой категории.</div>}
+        <div className={`productsViewport ${categorySlideDirection ? `productsViewportSlide-${categorySlideDirection}` : ""}`}>
+          <div className="productsGrid">
+            {loadingProducts ? (
+              Array.from({ length: 4 }).map((_, index) => (
+                <ProductSkeletonCard key={index} hidePrice={isRepeatCategory} />
+              ))
+            ) : products.length === 0 ? (
+              <div className="emptyState">Пока нет товаров в этой категории.</div>
+            ) : (
+              products.map((p) => (
+                <ProductCard
+                  key={p.id}
+                  product={p}
+                  hidePrice={isRepeatCategory}
+                  onClick={() => setSelected(p)}
+                />
+              ))
+            )}
+          </div>
         </div>
       </section>
 
