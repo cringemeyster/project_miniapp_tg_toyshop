@@ -883,8 +883,6 @@ textarea::placeholder {
   }
 }
 
-
-
 .categoryShellWide {
   width: min(100%, 760px);
   display: flex;
