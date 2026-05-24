@@ -54,8 +54,11 @@ async function uploadFiles(files) {
   if (!initData) throw new Error("Mini App открыт не через Telegram");
   if (!files?.length) return [];
 
-  const formData = new FormData();
-  files.forEach((file) => formData.append("files", file));
+const formData = new FormData();
+
+Array.from(files).forEach((file) => {
+    formData.append("files", file);
+});
 
   const res = await fetch(`${API_URL}/admin/uploads`, {
     method: "POST",
