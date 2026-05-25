@@ -4,17 +4,18 @@ set -e
 echo "Waiting for database..."
 
 python - <<'PY'
+import os
 import time
 import psycopg2
 
 for i in range(30):
     try:
         conn = psycopg2.connect(
-            host="db",
-            port=5432,
-            user="toyshop",
-            password="toyshop69",
-            dbname="toyshop"
+            host=os.getenv("POSTGRES_HOST", "db"),
+            port=int(os.getenv("POSTGRES_PORT", "5432")),
+            user=os.environ["POSTGRES_USER"],
+            password=os.environ["POSTGRES_PASSWORD"],
+            dbname=os.environ["POSTGRES_DB"],
         )
         conn.close()
         print("Database is ready")

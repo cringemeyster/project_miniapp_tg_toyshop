@@ -1,7 +1,7 @@
 import enum
 from datetime import datetime
 
-from sqlalchemy import String, Integer, Boolean, ForeignKey, DateTime, Enum, Text, UniqueConstraint
+from sqlalchemy import String, Integer, BigInteger, Boolean, ForeignKey, DateTime, Enum, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import ARRAY
 
@@ -45,7 +45,7 @@ class Order(Base):
     __tablename__ = "orders"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    user_tg_id: Mapped[int] = mapped_column(Integer, index=True)
+    user_tg_id: Mapped[int] = mapped_column(BigInteger, index=True)
     product_id: Mapped[int] = mapped_column(ForeignKey("products.id"))
     full_name: Mapped[str] = mapped_column(String(120))
     phone: Mapped[str] = mapped_column(String(30))
@@ -76,7 +76,7 @@ class SketchRequest(Base):
     __tablename__ = "sketch_requests"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    user_tg_id: Mapped[int] = mapped_column(Integer, index=True)
+    user_tg_id: Mapped[int] = mapped_column(BigInteger, index=True)
     username: Mapped[str | None] = mapped_column(String(80), nullable=True)
     text: Mapped[str] = mapped_column(Text)
     photos: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
@@ -87,7 +87,7 @@ class RepeatRequest(Base):
     __tablename__ = "repeat_requests"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    user_tg_id: Mapped[int] = mapped_column(Integer, index=True)
+    user_tg_id: Mapped[int] = mapped_column(BigInteger, index=True)
     username: Mapped[str | None] = mapped_column(String(80), nullable=True)
     product_id: Mapped[int] = mapped_column(ForeignKey("products.id"), index=True)
     text: Mapped[str] = mapped_column(Text)

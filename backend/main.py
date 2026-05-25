@@ -12,8 +12,8 @@ from app.api.routes_repeat import router as repeat_router
 app = FastAPI(title="ToyShop API")
 
 ALLOWED_ORIGINS = [
-    "https://app.syluna.ru",
-    "https://api.syluna.ru",
+    "https://syluna.shop",
+    "https://api.syluna.shop",
     "http://localhost:5173",
     "http://localhost:3000",
 ]

@@ -1,0 +1,20 @@
+name: Deploy ToyShop Application
+
+# 1. ТРИГГЕР (КОГДА ЗАПУСКАТЬСЯ)
+on:
+  push:
+    branches:
+      - main
+
+# 2.ОКРУЖЕНИЕ (ГДЕ ВЫПОЛНЯТЬ)
+jobs:
+  deploy:
+    runs-on: self-hosted
+
+# 3. СПИСОК КОМАНД (ЧТО ДЕЛАТЬ)
+    steps:
+      - name: Pull and Rebuild Application
+        run: |
+          cd /home/syluna/project_miniapp_tg_toyshop
+          git pull origin main
+          docker-compose up -d --build
