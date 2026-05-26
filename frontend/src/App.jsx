@@ -1,3 +1,5 @@
+import shoppingCartIcon from "./assets/shopping_cart.svg";
+import CartModal from "./components/CartModal";
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import logo from "./assets/logo_opacity.png";
 import logoShop from "./assets/logo_shop.png";
@@ -117,6 +119,18 @@ async function normalizeImageFile(file) {
   } finally {
     URL.revokeObjectURL(objectUrl);
   }
+}
+
+
+function makeCartSnapshot(product) {
+  return {
+    title: product.title,
+    price_rub: product.price_rub,
+    old_price_rub: product.old_price_rub,
+    photos: product.photos || [],
+    category: product.category || "toys",
+    is_active: Boolean(product.is_active),
+  };
 }
 
 function makeAdminForm() {
@@ -530,7 +544,11 @@ export default function App() {
   const [savingAdmin, setSavingAdmin] = useState(false);
   const [adminForm, setAdminForm] = useState(makeAdminForm());
   const [toast, setToast] = useState("");
+    const [cart, setCart] = useState([]);
+  const [showCart, setShowCart] = useState(false);
+  const [orderMode, setOrderMode] = useState("single");
   const user = useMemo(() => getTgUser(), []);
+  const cartStorageKey = useMemo(() => (user ? `toyshop_cart_${user.id}` : "toyshop_cart_guest"), [user]);
   const isMaster = Boolean(user && Number(user.id) === MASTER_ID);
   const isRepeatCategory = category === "repeat";
   const previousCategoryRef = useRef(category);
@@ -553,6 +571,25 @@ export default function App() {
   }, [category]);
 
   useEffect(() => {
+    try {
+      const raw = localStorage.getItem(cartStorageKey);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) setCart(parsed);
+      }
+    } catch {
+      setCart([]);
+    }
+  }, [cartStorageKey]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(cartStorageKey, JSON.stringify(cart));
+    } catch {}
+  }, [cart, cartStorageKey]);
+
+
+  useEffect(() => {
     const previousCategory = previousCategoryRef.current;
     if (previousCategory === category) return;
 
@@ -571,7 +608,7 @@ export default function App() {
   }, [category]);
 
   useEffect(() => {
-    const isModalOpen = Boolean(selected || showOrder || showRepeat || showSketch || showAdmin);
+    const isModalOpen = Boolean(selected || showOrder || showRepeat || showSketch || showAdmin || showCart);
     
     if (isModalOpen) {
       document.body.style.overflow = "hidden";
@@ -588,7 +625,7 @@ export default function App() {
       document.documentElement.style.overflow = "";
       document.body.style.touchAction = "";
     };
-  }, [selected, showOrder, showRepeat, showSketch, showAdmin]);
+  }, [selected, showOrder, showRepeat, showSketch, showAdmin, showCart]);
 
   function resetAdminForm() {
     setAdminForm(makeAdminForm());
@@ -620,7 +657,7 @@ export default function App() {
       if (selected) {
         const fresh = (data.items || []).find((item) => item.id === selected.id);
         if (fresh) setSelected(fresh);
-        else setSelected(null);
+        else if (selected.category === category) setSelected(null);
       }
     } catch (e) {
       setToast(`Ошибка загрузки товаров: ${e.message}`);
@@ -629,7 +666,58 @@ export default function App() {
     }
   }
 
-  async function createOrder() {
+
+  function isProductInCart(productId) {
+    return cart.some((item) => item.product_id === productId);
+  }
+
+  function cartCount() {
+    return cart.length;
+  }
+
+  function getCartDetailedItems() {
+    return cart.map((item) => {
+      const fresh = products.find((p) => p.id === item.product_id);
+      const product = fresh || {
+        id: item.product_id,
+        title: item.snapshot?.title || "Товар",
+        price_rub: item.snapshot?.price_rub || 0,
+        old_price_rub: item.snapshot?.old_price_rub || null,
+        photos: item.snapshot?.photos || [],
+        category: item.snapshot?.category || "toys",
+        is_active: item.snapshot?.is_active ?? true,
+      };
+
+      return { ...item, product };
+    });
+  }
+
+  function addToCart(product) {
+    if (!product || product.category === "repeat") return;
+    if (isProductInCart(product.id)) {
+      setToast(`Товар "${product.title}" уже в корзине`);
+      return;
+    }
+
+    setCart((prev) => [
+      ...prev,
+      {
+        product_id: product.id,
+        snapshot: makeCartSnapshot(product),
+      },
+    ]);
+    setToast(`Товар "${product.title}" добавлен в корзину`);
+  }
+
+  function removeFromCart(productId) {
+    setCart((prev) => prev.filter((item) => item.product_id !== productId));
+  }
+
+  function clearCart() {
+    setCart([]);
+  }
+
+  async function createSingleOrder() {
     if (!selected) return;
     const f = orderForm;
     if (!f.full_name || !f.phone || !f.city || !f.pvz_text) {
@@ -641,11 +729,51 @@ export default function App() {
       setToast(`Заказ создан (#${order.id}). Следом подключим оплату СБП.`);
       setShowOrder(false);
       setSelected(null);
+      setOrderMode("single");
       setOrderForm({ full_name: "", phone: "", city: "", pvz_type: "ozon", pvz_text: "" });
       loadProducts();
     } catch (e) {
       setToast(`Ошибка заказа: ${e.message}`);
     }
+  }
+
+
+  async function createCartOrder() {
+    const f = orderForm;
+    if (!f.full_name || !f.phone || !f.city || !f.pvz_text) {
+      setToast("Заполни все поля доставки");
+      return;
+    }
+    if (!cart.length) {
+      setToast("Корзина пуста");
+      return;
+    }
+
+    try {
+      const result = await api("/orders/bulk", {
+        method: "POST",
+        body: {
+          items: cart.map((item) => ({ product_id: item.product_id })),
+          ...f,
+        },
+      });
+
+      setToast(`Заказ оформлен. Позиций: ${result.count}`);
+      clearCart();
+      setShowCart(false);
+      setShowOrder(false);
+      setSelected(null);
+      setOrderMode("single");
+      setOrderForm({ full_name: "", phone: "", city: "", pvz_type: "ozon", pvz_text: "" });
+      loadProducts();
+    } catch (e) {
+      setToast(`Ошибка заказа: ${e.message}`);
+    }
+  }
+
+  function submitOrder() {
+    if (orderMode === "cart") return createCartOrder();
+    return createSingleOrder();
   }
 
   async function submitSketch() {
@@ -815,7 +943,18 @@ export default function App() {
           <img className="topbarLogo" src={logo} alt="SYLUNA" />
           <img className="shopLogoText" src={logoShop} alt="Магазин игрушек" />
         </div>
-        <button className="topbarAction ghostGlassBtn pressable" onClick={() => setShowSketch(true)}>Заказать игрушку</button>
+
+        <div className="topbarActions">
+          <button
+            className="topbarAction ghostGlassBtn pressable topbarCartBtn"
+            onClick={() => setShowCart(true)}
+            aria-label="Открыть корзину"
+          >
+            <img className="topbarCartIcon" src={shoppingCartIcon} alt="" aria-hidden="true" />
+            {cartCount() > 0 && <span className="topbarCartCount">{cartCount()}</span>}
+          </button>
+          <button className="topbarAction ghostGlassBtn pressable" onClick={() => setShowSketch(true)}>Заказать игрушку</button>
+        </div>
       </header>
 
       <div className="divider" />
@@ -843,7 +982,14 @@ export default function App() {
                   key={p.id}
                   product={p}
                   hidePrice={isRepeatCategory}
+                  isInCart={isProductInCart(p.id)}
                   onClick={() => setSelected(p)}
+                  onBuy={(product) => {
+                    setSelected(product);
+                    setOrderMode("single");
+                    setShowOrder(true);
+                  }}
+                  onAddToCart={addToCart}
                 />
               ))
             )}
@@ -855,7 +1001,16 @@ export default function App() {
         <ProductDetailsModal
           product={selected}
           onClose={() => setSelected(null)}
-          onOrder={() => isRepeatCategory ? setShowRepeat(true) : setShowOrder(true)}
+          onOrder={() => {
+            if (isRepeatCategory) {
+              setShowRepeat(true);
+            } else {
+              setOrderMode("single");
+              setShowOrder(true);
+            }
+          }}
+          onAddToCart={addToCart}
+          isInCart={isProductInCart(selected.id)}
           isMaster={isMaster}
           onEdit={openEditProduct}
           onToggleActive={toggleProductActive}
@@ -865,7 +1020,34 @@ export default function App() {
         />
       )}
 
-      {selected && showOrder && <OrderModal product={selected} orderForm={orderForm} setOrderForm={setOrderForm} onClose={() => setShowOrder(false)} onSubmit={createOrder} />}
+      {showOrder && (
+        <OrderModal
+          product={selected}
+          cartItems={getCartDetailedItems()}
+          orderMode={orderMode}
+          orderForm={orderForm}
+          setOrderForm={setOrderForm}
+          onClose={() => setShowOrder(false)}
+          onSubmit={submitOrder}
+        />
+      )}
+
+      {showCart && (
+        <CartModal
+          cartItems={getCartDetailedItems()}
+          onClose={() => setShowCart(false)}
+          onRemove={removeFromCart}
+          onCheckout={() => {
+            if (!cart.length) {
+              setToast("Корзина пуста");
+              return;
+            }
+            setShowCart(false);
+            setOrderMode("cart");
+            setShowOrder(true);
+          }}
+        />
+      )}
 
       {selected && showRepeat && <RepeatModal product={selected} repeatText={repeatText} setRepeatText={setRepeatText} onClose={() => setShowRepeat(false)} onSubmit={submitRepeatRequest} />}
 
