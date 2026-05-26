@@ -6,6 +6,8 @@ export default function ProductDetailsModal({
   product,
   onClose,
   onOrder,
+  onAddToCart,
+  isInCart,
   isMaster,
   onEdit,
   onToggleActive,
@@ -20,10 +22,12 @@ export default function ProductDetailsModal({
     <div className="modalBack" onClick={onClose}>
       <div className="detailModal" onClick={(e) => e.stopPropagation()}>
         <button className="backBtn pressable" onClick={onClose}>← Назад</button>
+
         <div className="detailCard liquidGlassStrong">
           <div className="detailImageWrap">
             <Gallery photos={photos} title={product.title} imageClassName="detailImage" />
           </div>
+
           <div className="detailContent">
             <h2 className="detailTitle">{product.title}</h2>
             {!hidePrice && (
@@ -39,10 +43,22 @@ export default function ProductDetailsModal({
               </div>
             )}
             <p className="detailText">{product.description || "Описание товара пока не добавлено."}</p>
+
             <div className="detailActions">
               <button className="primaryBtn pressable" onClick={onOrder}>
-                {isRepeatCategory ? "Заказать повторно" : "Оформить заказ"}
+                {isRepeatCategory ? "Заказать повторно" : "Купить сейчас"}
               </button>
+
+              {!isRepeatCategory && (
+                <button
+                  className={`pressable ${isInCart ? "ghostBtn" : "primaryBtn"}`}
+                  onClick={() => onAddToCart(product)}
+                  disabled={isInCart}
+                >
+                  {isInCart ? "В корзине" : "Добавить в корзину"}
+                </button>
+              )}
+
               {isMaster && (
                 <>
                   <button className="ghostBtn pressable" onClick={() => onEdit(product)}>Редактировать</button>
@@ -56,6 +72,7 @@ export default function ProductDetailsModal({
                   )}
                 </>
               )}
+
               <button className="ghostBtn pressable" onClick={onClose}>Закрыть</button>
             </div>
           </div>
