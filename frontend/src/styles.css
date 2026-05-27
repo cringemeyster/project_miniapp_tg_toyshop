@@ -1039,6 +1039,11 @@ textarea::placeholder {
   gap: 10px;
 }
 
+.cartActionDisabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
 .cartModal {
   max-width: 720px;
 }
