@@ -1,4 +1,7 @@
 import shoppingCartIcon from "./assets/shopping_cart.svg";
+import paymentsIcon from "./assets/payments.svg";
+import addShoppingCartIcon from "./assets/add_shopping_cart.svg";
+import checkIcon from "./assets/check.svg";
 import CartModal from "./components/CartModal";
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import logo from "./assets/logo_opacity.png";
@@ -287,7 +290,7 @@ function CategorySwitch({ category, setCategory }) {
   );
 }
 
-function ProductCard({ product, onClick, hidePrice = false }) {
+function ProductCard({ product, onClick, onBuy, onAddToCart, hidePrice = false, isInCart = false }) {
   const hasDiscount = Number(product.old_price_rub) > Number(product.price_rub);
   const photos = (product.photos || []).map(absoluteMediaUrl);
 
@@ -297,18 +300,50 @@ function ProductCard({ product, onClick, hidePrice = false }) {
         <div className="productImageWrap">
           <Gallery photos={photos} title={product.title} imageClassName="productImage" />
         </div>
-        <div className="productBody">
-          <div className="productTitle">{product.title}</div>
-          {!hidePrice && (
-            <div className="productPrice">
-              {hasDiscount ? (
-                <>
-                  <div className="oldPriceText">{product.old_price_rub} ₽</div>
+        <div className="productBody productBodyWithActions">
+          <div className="productInfoBlock">
+            <div className="productTitle">{product.title}</div>
+            {!hidePrice && (
+              <div className="productPrice">
+                {hasDiscount ? (
+                  <>
+                    <div>{product.price_rub} ₽</div>
+                    <div className="oldPriceText productOldPriceInline">{product.old_price_rub} ₽</div>
+                  </>
+                ) : (
                   <div>{product.price_rub} ₽</div>
-                </>
-              ) : (
-                <div>{product.price_rub} ₽</div>
-              )}
+                )}
+              </div>
+            )}
+          </div>
+
+          {!hidePrice && (
+            <div className="productQuickActions" onClick={(e) => e.stopPropagation()}>
+              <button
+                type="button"
+                className="productActionBtn primaryBtn pressable"
+                onClick={() => onBuy(product)}
+                aria-label="Купить"
+                title="Купить"
+              >
+                <img className="productActionIcon" src={paymentsIcon} alt="" aria-hidden="true" />
+              </button>
+
+              <button
+                type="button"
+                className={`productActionBtn pressable ${isInCart ? "ghostBtn" : "primaryBtn"}`}
+                onClick={() => onAddToCart(product)}
+                aria-label={isInCart ? "Уже в корзине" : "Добавить в корзину"}
+                title={isInCart ? "Уже в корзине" : "Добавить в корзину"}
+                disabled={isInCart}
+              >
+                <img
+                  className="productActionIcon"
+                  src={isInCart ? checkIcon : addShoppingCartIcon}
+                  alt=""
+                  aria-hidden="true"
+                />
+              </button>
             </div>
           )}
         </div>
@@ -321,6 +356,8 @@ function ProductDetailsModal({
   product,
   onClose,
   onOrder,
+  onAddToCart,
+  isInCart,
   isMaster,
   onEdit,
   onToggleActive,
@@ -360,9 +397,26 @@ function ProductDetailsModal({
             <p className="detailText">{product.description || "Описание товара пока не добавлено."}</p>
 
             <div className="detailActions">
-              <button className="primaryBtn pressable" onClick={onOrder}>
-                {isRepeatCategory ? "Заказать повторно" : "Оформить заказ"}
-              </button>
+              {!isRepeatCategory && (
+                <div className="detailPrimaryActions">
+                  <button className="primaryBtn pressable" onClick={onOrder}>
+                    Оформить заказ
+                  </button>
+                  <button
+                    className={`ghostBtn pressable ${isInCart ? "cartActionDisabled" : ""}`}
+                    onClick={() => onAddToCart(product)}
+                    disabled={isInCart}
+                  >
+                    {isInCart ? "Уже в корзине" : "В корзину"}
+                  </button>
+                </div>
+              )}
+
+              {isRepeatCategory && (
+                <button className="primaryBtn pressable" onClick={onOrder}>
+                  Заказать повторно
+                </button>
+              )}
 
               {isMaster && (
                 <>
