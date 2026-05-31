@@ -18,7 +18,7 @@ export default function OrderModal({
         {orderMode === "cart" ? (
           <div className="orderSub">Товаров в корзине: {cartItems.length}</div>
         ) : (
-          <div className="orderSub">{product.title}</div>
+          <div className="orderSub">{product?.title}</div>
         )}
 
         <div className="formGrid">
