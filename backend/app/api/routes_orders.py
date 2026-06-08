@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from app.api.deps import get_tg_user
+from app.api.deps import get_current_user
 from app.db.session import SessionLocal
 from app.db.models import Order, PVZType, OrderStatus, Product
 from app.bot.messages import send_new_order_to_master
@@ -16,14 +16,15 @@ class OrderIn(BaseModel):
     pvz_text: str = Field(min_length=1, max_length=300)
 
 @router.post("/orders")
-async def create_order(payload: OrderIn, user: dict = Depends(get_tg_user)):
+async def create_order(payload: OrderIn, user: dict = Depends(get_current_user)):
     async with SessionLocal() as session:
         product = await session.get(Product, payload.product_id)
         if not product or not product.is_active:
             raise HTTPException(status_code=404, detail="Product not found")
 
         o = Order(
-            user_tg_id=int(user["id"]),
+            external_user_id=str(user["id"]),
+            platform=user.get("platform", "tg"),
             product_id=payload.product_id,
             full_name=payload.full_name,
             phone=payload.phone,
@@ -36,9 +37,11 @@ async def create_order(payload: OrderIn, user: dict = Depends(get_tg_user)):
         await session.commit()
         await session.refresh(o)
 
+        # We handle bot messages differently for TG vs Web (different typing)
+        # But for now passing str and allowing `bot.messages` to handle it
         await send_new_order_to_master(
             order_id=o.id,
-            user_id=int(user["id"]),
+            user_id=user["id"],
             username=user.get("username"),
             product_title=product.title,
             full_name=o.full_name,
@@ -63,7 +66,7 @@ class OrderBulkIn(BaseModel):
     pvz_text: str = Field(min_length=1, max_length=300)
 
 @router.post("/orders/bulk")
-async def create_bulk_order(payload: OrderBulkIn, user: dict = Depends(get_tg_user)):
+async def create_bulk_order(payload: OrderBulkIn, user: dict = Depends(get_current_user)):
     async with SessionLocal() as session:
         orders_created = 0
         for item in payload.items:
@@ -72,7 +75,8 @@ async def create_bulk_order(payload: OrderBulkIn, user: dict = Depends(get_tg_us
                 continue  # Skip inactive or missing products
 
             o = Order(
-                user_tg_id=int(user["id"]),
+                external_user_id=str(user["id"]),
+                platform=user.get("platform", "tg"),
                 product_id=item.product_id,
                 full_name=payload.full_name,
                 phone=payload.phone,
@@ -87,7 +91,7 @@ async def create_bulk_order(payload: OrderBulkIn, user: dict = Depends(get_tg_us
 
             await send_new_order_to_master(
                 order_id=o.id,
-                user_id=int(user["id"]),
+                user_id=user["id"],
                 username=user.get("username"),
                 product_title=product.title,
                 full_name=o.full_name,

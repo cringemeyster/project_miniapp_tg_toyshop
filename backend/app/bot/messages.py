@@ -4,7 +4,7 @@ from app.core.config import settings
 
 async def send_new_order_to_master(
     order_id: int,
-    user_id: int,
+    user_id: str | int,
     username: str | None,
     product_title: str,
     full_name: str,
@@ -13,7 +13,7 @@ async def send_new_order_to_master(
     pvz_type: str,
     pvz_text: str,
 ):
-    username_line = f"Username: @{username}" if username else "Username: —"
+    username_line = f"Username: @{username}" if username and username != "Web Guest" else "Username: —"
 
     text = (
         f"🛒 Новый заказ #{order_id}\n\n"
@@ -23,7 +23,7 @@ async def send_new_order_to_master(
         f"Город: {city}\n"
         f"ПВЗ: {pvz_type}\n"
         f"Адрес/номер ПВЗ: {pvz_text}\n\n"
-        f"Telegram ID: {user_id}\n"
+        f"ID: {user_id}\n"
         f"{username_line}"
     )
 
@@ -32,16 +32,16 @@ async def send_new_order_to_master(
 
 async def send_new_sketch_to_master(
     sketch_id: int,
-    user_id: int,
+    user_id: str | int,
     username: str | None,
     text_value: str,
 ):
-    username_line = f"Username: @{username}" if username else "Username: —"
+    username_line = f"Username: @{username}" if username and username != "Web Guest" else "Username: —"
 
     text = (
         f"🎨 Новая заявка на эскиз #{sketch_id}\n\n"
         f"Описание:\n{text_value}\n\n"
-        f"Telegram ID: {user_id}\n"
+        f"ID: {user_id}\n"
         f"{username_line}"
     )
 
@@ -50,18 +50,18 @@ async def send_new_sketch_to_master(
 
 async def send_repeat_request_to_master(
     repeat_request_id: int,
-    user_id: int,
+    user_id: str | int,
     username: str | None,
     product_title: str,
     text_value: str,
 ):
-    username_line = f"Username: @{username}" if username else "Username: —"
+    username_line = f"Username: @{username}" if username and username != "Web Guest" else "Username: —"
 
     text = (
         f"♻️ Новая заявка на повтор #{repeat_request_id}\n\n"
         f"Товар-основа: {product_title}\n"
         f"Пожелания по изменениям:\n{text_value}\n\n"
-        f"Telegram ID: {user_id}\n"
+        f"ID: {user_id}\n"
         f"{username_line}"
     )
 
