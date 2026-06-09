@@ -12,8 +12,8 @@ from app.api.routes_repeat import router as repeat_router
 app = FastAPI(title="ToyShop API")
 
 ALLOWED_ORIGINS = [
-    "https://syluna.shop",
-    "https://api.syluna.shop",
+    "https://app.syluna.ru",
+    "https://api.syluna.ru",
     "http://localhost:5173",
     "http://localhost:3000",
 ]
@@ -22,13 +22,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=[
-        "Content-Type",
-        "Authorization",
-        "X-TG-INIT-DATA",
-        "X-DEV-USER-ID",
-    ],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 uploads_dir = Path("uploads")

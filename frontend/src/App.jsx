@@ -6,14 +6,12 @@ import shoppingCartIcon from "./assets/shopping_cart.svg";
 import { CATEGORY_ORDER } from "./constants";
 import { getAdapter } from "./utils/platform";
 import { api, uploadFiles } from "./utils/api";
-import { absoluteMediaUrl } from "./utils/absoluteMediaUrl";
 import { normalizeImageFile } from "./utils/image";
 import { makeAdminForm } from "./utils/makeAdminForm";
 import { moveArrayItem } from "./utils/moveArrayItem";
 import { makeCartSnapshot } from "./utils/makeCartSnapshot";
 
 import CartModal from "./components/CartModal";
-import Gallery from "./components/Gallery";
 import CategorySwitch from "./components/CategorySwitch";
 import ProductCard from "./components/ProductCard";
 import ProductDetailsModal from "./components/ProductDetailsModal";
