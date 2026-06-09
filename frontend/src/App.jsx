@@ -3,8 +3,8 @@ import logo from "./assets/logo_opacity.png";
 import logoShop from "./assets/logo_shop.png";
 import shoppingCartIcon from "./assets/shopping_cart.svg";
 
-import { CATEGORY_ORDER, MASTER_ID } from "./constants";
-import { tg, getTgUser } from "./utils/tg";
+import { CATEGORY_ORDER } from "./constants";
+import { getAdapter } from "./utils/platform";
 import { api, uploadFiles } from "./utils/api";
 import { absoluteMediaUrl } from "./utils/absoluteMediaUrl";
 import { normalizeImageFile } from "./utils/image";
@@ -22,6 +22,7 @@ import SketchModal from "./components/SketchModal";
 import RepeatModal from "./components/RepeatModal";
 import AdminModal from "./components/AdminModal";
 import ProductSkeletonCard from "./components/ProductSkeletonCard";
+import ReceiptModal from "./components/ReceiptModal";
 
 export default function App() {
   const [category, setCategory] = useState("toys");
@@ -38,22 +39,23 @@ export default function App() {
   const [savingAdmin, setSavingAdmin] = useState(false);
   const [adminForm, setAdminForm] = useState(makeAdminForm());
   const [toast, setToast] = useState("");
-    const [cart, setCart] = useState([]);
+  const [cart, setCart] = useState([]);
   const [showCart, setShowCart] = useState(false);
   const [orderMode, setOrderMode] = useState("single");
-  const user = useMemo(() => getTgUser(), []);
+  const [receiptText, setReceiptText] = useState("");
+
+  const adapter = useMemo(() => getAdapter(), []);
+  const user = useMemo(() => adapter.getUser(), [adapter]);
+  const isMaster = useMemo(() => adapter.isMaster(), [adapter]);
+
   const cartStorageKey = useMemo(() => (user ? `toyshop_cart_${user.id}` : "toyshop_cart_guest"), [user]);
-  const isMaster = Boolean(user && Number(user.id) === MASTER_ID);
   const isRepeatCategory = category === "repeat";
   const previousCategoryRef = useRef(category);
   const [categorySlideDirection, setCategorySlideDirection] = useState("");
 
   useEffect(() => {
-    const telegram = tg();
-    telegram?.ready?.();
-    telegram?.expand?.();
-    telegram?.disableVerticalSwipes?.();
-  }, []);
+    adapter.init();
+  }, [adapter]);
 
   useLayoutEffect(() => {
     setProducts([]);
@@ -102,7 +104,7 @@ export default function App() {
   }, [category]);
 
   useEffect(() => {
-    const isModalOpen = Boolean(selected || showOrder || showRepeat || showSketch || showAdmin || showCart);
+    const isModalOpen = Boolean(selected || showOrder || showRepeat || showSketch || showAdmin || showCart || receiptText);
     
     if (isModalOpen) {
       document.body.style.overflow = "hidden";
@@ -119,7 +121,7 @@ export default function App() {
       document.documentElement.style.overflow = "";
       document.body.style.touchAction = "";
     };
-  }, [selected, showOrder, showRepeat, showSketch, showAdmin, showCart]);
+  }, [selected, showOrder, showRepeat, showSketch, showAdmin, showCart, receiptText]);
 
   function resetAdminForm() {
     setAdminForm(makeAdminForm());
@@ -211,6 +213,14 @@ export default function App() {
     setCart([]);
   }
 
+  function handleOrderSuccess(message) {
+    if (adapter.showReceipt()) {
+      setReceiptText(message);
+    } else {
+      setToast(message);
+    }
+  }
+
   async function createSingleOrder() {
     if (!selected) return;
     const f = orderForm;
@@ -220,17 +230,16 @@ export default function App() {
     }
     try {
       const order = await api("/orders", { method: "POST", body: { product_id: selected.id, ...f } });
-      setToast(`Заказ создан (#${order.id}). Следом подключим оплату СБП.`);
       setShowOrder(false);
       setSelected(null);
       setOrderMode("single");
       setOrderForm({ full_name: "", phone: "", city: "", pvz_type: "ozon", pvz_text: "" });
       loadProducts();
+      handleOrderSuccess(`Заказ создан (#${order.id}). Следом подключим оплату СБП.`);
     } catch (e) {
       setToast(`Ошибка заказа: ${e.message}`);
     }
   }
-
 
   async function createCartOrder() {
     const f = orderForm;
@@ -252,7 +261,6 @@ export default function App() {
         },
       });
 
-      setToast(`Заказ оформлен. Позиций: ${result.count}`);
       clearCart();
       setShowCart(false);
       setShowOrder(false);
@@ -260,6 +268,7 @@ export default function App() {
       setOrderMode("single");
       setOrderForm({ full_name: "", phone: "", city: "", pvz_type: "ozon", pvz_text: "" });
       loadProducts();
+      handleOrderSuccess(`Заказ оформлен. Позиций: ${result.count}`);
     } catch (e) {
       setToast(`Ошибка заказа: ${e.message}`);
     }
@@ -279,7 +288,7 @@ export default function App() {
       await api("/sketch", { method: "POST", body: { text: sketchText, photos: [] } });
       setSketchText("");
       setShowSketch(false);
-      setToast("Мастер получил ваше описание игрушки, в скором времени он вам напишет для уточнения деталей.");
+      handleOrderSuccess("Мастер получил ваше описание игрушки, в скором времени он вам напишет для уточнения деталей.");
     } catch (e) {
       setToast(`Ошибка отправки: ${e.message}`);
     }
@@ -296,7 +305,7 @@ export default function App() {
       setRepeatText("");
       setShowRepeat(false);
       setSelected(null);
-      setToast("Мастер получил заявку на повтор и свяжется с вами для уточнения деталей.");
+      handleOrderSuccess("Мастер получил заявку на повтор и свяжется с вами для уточнения деталей.");
     } catch (e) {
       setToast(`Ошибка отправки: ${e.message}`);
     }
@@ -567,6 +576,10 @@ export default function App() {
       )}
 
       {toast && <div className="toast liquidGlassStrong" onClick={() => setToast("")}>{toast}</div>}
+
+      {receiptText && (
+        <ReceiptModal text={receiptText} onClose={() => setReceiptText("")} />
+      )}
     </div>
   );
 }

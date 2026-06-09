@@ -45,7 +45,8 @@ class Order(Base):
     __tablename__ = "orders"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    user_tg_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    external_user_id: Mapped[str] = mapped_column(String(100), index=True)
+    platform: Mapped[str] = mapped_column(String(20), default="tg", index=True)
     product_id: Mapped[int] = mapped_column(ForeignKey("products.id"))
     full_name: Mapped[str] = mapped_column(String(120))
     phone: Mapped[str] = mapped_column(String(30))
@@ -76,7 +77,8 @@ class SketchRequest(Base):
     __tablename__ = "sketch_requests"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    user_tg_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    external_user_id: Mapped[str] = mapped_column(String(100), index=True)
+    platform: Mapped[str] = mapped_column(String(20), default="tg", index=True)
     username: Mapped[str | None] = mapped_column(String(80), nullable=True)
     text: Mapped[str] = mapped_column(Text)
     photos: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
@@ -87,7 +89,8 @@ class RepeatRequest(Base):
     __tablename__ = "repeat_requests"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    user_tg_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    external_user_id: Mapped[str] = mapped_column(String(100), index=True)
+    platform: Mapped[str] = mapped_column(String(20), default="tg", index=True)
     username: Mapped[str | None] = mapped_column(String(80), nullable=True)
     product_id: Mapped[int] = mapped_column(ForeignKey("products.id"), index=True)
     text: Mapped[str] = mapped_column(Text)

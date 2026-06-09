@@ -1,13 +1,13 @@
 import { API_URL } from "../constants";
-import { getInitData } from "./tg";
+import { getAdapter } from "./platform";
 
 export async function api(path, { method = "GET", body } = {}) {
-  const initData = getInitData();
-  if (!initData) throw new Error("Mini App открыт не через Telegram");
+  const adapter = getAdapter();
+  const headers = adapter.getHeaders();
 
   const res = await fetch(`${API_URL}${path}`, {
     method,
-    headers: { "Content-Type": "application/json", "X-TG-INIT-DATA": initData },
+    headers: { "Content-Type": "application/json", ...headers },
     body: body ? JSON.stringify(body) : undefined,
   });
 
@@ -19,8 +19,9 @@ export async function api(path, { method = "GET", body } = {}) {
 }
 
 export async function uploadFiles(files) {
-  const initData = getInitData();
-  if (!initData) throw new Error("Mini App открыт не через Telegram");
+  const adapter = getAdapter();
+  const headers = adapter.getHeaders();
+
   if (!files?.length) return [];
 
   const formData = new FormData();
@@ -30,7 +31,7 @@ export async function uploadFiles(files) {
 
   const res = await fetch(`${API_URL}/admin/uploads`, {
     method: "POST",
-    headers: { "X-TG-INIT-DATA": initData },
+    headers,
     body: formData,
   });
 

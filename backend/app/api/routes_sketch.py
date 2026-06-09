@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
-from app.api.deps import get_tg_user
+from app.api.deps import get_current_user
 from app.db.session import SessionLocal
 from app.db.models import SketchRequest
 from app.bot.messages import send_new_sketch_to_master
@@ -12,10 +12,11 @@ class SketchIn(BaseModel):
     photos: list[str] = []
 
 @router.post("/sketch")
-async def create_sketch(payload: SketchIn, user: dict = Depends(get_tg_user)):
+async def create_sketch(payload: SketchIn, user: dict = Depends(get_current_user)):
     async with SessionLocal() as session:
         s = SketchRequest(
-            user_tg_id=int(user["id"]),
+            external_user_id=str(user["id"]),
+            platform=user.get("platform", "tg"),
             username=user.get("username"),
             text=payload.text,
             photos=payload.photos,
@@ -26,7 +27,7 @@ async def create_sketch(payload: SketchIn, user: dict = Depends(get_tg_user)):
 
         await send_new_sketch_to_master(
             sketch_id=s.id,
-            user_id=int(user["id"]),
+            user_id=user["id"],
             username=user.get("username"),
             text_value=s.text,
         )
